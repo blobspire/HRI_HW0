@@ -40,6 +40,10 @@ sudo apt update && sudo apt upgrade
 
 3. Install a text editing software. I use [Sublime](https://www.sublimetext.com/download), but there are many good options. You will use this text editing software to write your code.
 
+### Mac
+
+[to implement]
+
 ## Expected Output
 
 <img src="env.gif" width="750">
