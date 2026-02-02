@@ -27,7 +27,7 @@ class Panda():
             p.resetJointState(self.panda, idx, jointStartPositions[idx])
 
     # get the robot's joint state and end-effector state
-    def get_state(self):
+    def get_state(self): # Returns a dictionary, ie state["joint-position"], state["ee-position"], etc.
         joint_values = p.getJointStates(self.panda, range(11))
         ee_values = p.getLinkState(self.panda, 11)
         state = {}
