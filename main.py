@@ -4,7 +4,6 @@ import numpy as np
 import os
 import time
 from robot import Panda
-import math
 
 import ollama
 
