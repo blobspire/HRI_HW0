@@ -28,8 +28,6 @@ table = p.loadURDF(os.path.join(urdfRootPath, "table/table.urdf"), basePosition=
 cube1 = p.loadURDF(os.path.join(urdfRootPath, "cube_small.urdf"), basePosition=[0.6 + np.random.uniform(-0.05, 0.05), -0.2 + np.random.uniform(-0.05, 0.05), 0.05])
 cube2 = p.loadURDF(os.path.join(urdfRootPath, "cube_small.urdf"), basePosition=[0.4 + np.random.uniform(-0.05, 0.05), -0.3 + np.random.uniform(-0.05, 0.05), 0.05])
 
-# p.quaternionFromEuler([0, 0, 0]) # Uses quaternion by default. Can convert from Euler angle since easier
-
 # load the robot
 jointStartPositions = [0.0, 0.0, 0.0, -2*np.pi/4, 0.0, np.pi/2, np.pi/4, 0.0, 0.0, 0.04, 0.04]
 panda = Panda(basePosition=[0, 0, 0],
@@ -198,6 +196,7 @@ while not terminate: # Execute commands for robot
         })
 
 
+# Notes from class:
 
 # Control robot with LLM commands via Ollama
 # Ignore joints 8 and 9
@@ -207,3 +206,5 @@ while not terminate: # Execute commands for robot
 
 # LLM should have access to state of arm and ball. It should be given command from user and append the state
 # Have some code here that can call robot functions
+
+# p.quaternionFromEuler([0, 0, 0]) # Uses quaternion by default. Can convert from Euler angle since easier
