@@ -23,9 +23,9 @@ p.resetDebugVisualizerCamera(cameraDistance=1.0,
 urdfRootPath = pybullet_data.getDataPath()
 plane = p.loadURDF(os.path.join(urdfRootPath, "plane.urdf"), basePosition=[0, 0, -0.625])
 table = p.loadURDF(os.path.join(urdfRootPath, "table/table.urdf"), basePosition=[0.5, 0, -0.625])
-cube1 = p.loadURDF(os.path.join(urdfRootPath, "cube_small.urdf"), basePosition=[0.6, -0.2, 0.05])
-cube2 = p.loadURDF(os.path.join(urdfRootPath, "cube_small.urdf"), basePosition=[0.4, -0.3, 0.05])
-
+# Randomize cube position to ensure genuine reasoning
+cube1 = p.loadURDF(os.path.join(urdfRootPath, "cube_small.urdf"), basePosition=[0.6 + np.random.uniform(-0.05, 0.05), -0.2 + np.random.uniform(-0.05, 0.05), 0.05])
+cube2 = p.loadURDF(os.path.join(urdfRootPath, "cube_small.urdf"), basePosition=[0.4 + np.random.uniform(-0.05, 0.05), -0.3 + np.random.uniform(-0.05, 0.05), 0.05])
 
 # p.quaternionFromEuler([0, 0, 0]) # Uses quaternion by default. Can convert from Euler angle since easier
 
@@ -95,7 +95,8 @@ while not terminate: # Execute commands for robot
     To place down a cube, move the end-effector above the target position, lower it down, open the gripper, then lift up.
     The end-effector orientation should have the gripper facing downwards (i.e., rotz = 0.0) unless specified otherwise.
     The units for x, y, z, and rotz are meters and radians, respectively.
-    Use the current robot and environment state to determine appropriate coordinates for the actions.
+    Use the current robot and environment states to determine appropriate coordinates for the actions.
+
     Your response should be a semicolon separated list of the exact commands to run.
     Do not provide any additional text or explanations.
 
@@ -105,16 +106,23 @@ while not terminate: # Execute commands for robot
     User command: pick up a cube
     Response: open_gripper(); move_to_pose(0.60, -0.20, 0.12, 0.0); move_to_pose(0.60, -0.20, 0.03, 0.0); close_gripper(); move_to_pose(0.60, -0.20, 0.20, 0.0)
     <End of Example>
+
+    <Start of Example>
+    Current robot state: Joint Positions: [0.0, 0.0, 0.0, -1.57, 0.0, 1.57, 0.785, 0.0, 0.0, 0.04, 0.04], End-Effector Position: (0.55, 0.00, 0.52)
+    Current environment state: Cube1 Position: (0.60, -0.20, 0.025), Cube1 Orientation: (0.0, 0.0, 0.0, 1.0), Cube2 Position: (0.40, -0.30, 0.025), Cube2 Orientation: (0.0, 0.0, 0.0, 1.0)
+    User command: stack cube1 on top of cube2
+    Response: open_gripper(); move_to_pose(0.60, -0.20, 0.12, 0.0); move_to_pose(0.60, -0.20, 0.03, 0.0); close_gripper(); move_to_pose(0.60, -0.20, 0.20, 0.0); move_to_pose(0.40, -0.30, 0.18, 0.0); move_to_pose(0.40, -0.30, 0.08, 0.0); open_gripper(); move_to_pose(0.40, -0.30, 0.22, 0.0)
+    <End of Example>
     
     Current robot state: {state_description}
     Current environment state: {env_description}
     User command: {user_command}
     Response:"""
 
-    print("\nPrompt to LLM:")
-    print(prompt)
+    # print("\nPrompt to LLM:")
+    # print(prompt)
 
-    response = generate("llama3", prompt=prompt)
+    response = generate("deepseek-r1:14b", prompt=prompt)
 
     reponse_text = response["response"]
 
@@ -122,7 +130,8 @@ while not terminate: # Execute commands for robot
     print(reponse_text)
 
     # Command options: move_to_pose(x, y, z, rotz), open_gripper(), close_gripper()
-    commands = [cmd.strip() for cmd in reponse_text.split(';')]
+    commands = [cmd.strip() for cmd in reponse_text.split(';') if cmd.strip()]
+
     for cmd in commands:
         if cmd.startswith("move_to_pose"):
             # Extract parameters
