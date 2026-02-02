@@ -30,6 +30,11 @@ class Panda():
     def get_state(self): # Returns a dictionary, ie state["joint-position"], state["ee-position"], etc.
         joint_values = p.getJointStates(self.panda, range(11))
         ee_values = p.getLinkState(self.panda, 11)
+
+        finger_left = joint_values[9][0]
+        finger_right = joint_values[10][0]
+        gripper_width = float(finger_left + finger_right)
+
         state = {}
         state["joint-position"] = [item[0] for item in joint_values]
         state["joint-velocity"] = [item[1] for item in joint_values]
@@ -37,6 +42,15 @@ class Panda():
         state["ee-position"] = ee_values[4]
         state["ee-quaternion"] = ee_values[5]
         state["ee-euler"] = p.getEulerFromQuaternion(state["ee-quaternion"])
+
+        # Gripper state
+        if gripper_width > 0.06:
+            state["gripper_state"] = "open"
+        elif gripper_width < 0.02:
+            state["gripper_state"] = "closed"
+        else:
+            state["gripper_state"] = "partially open"
+
         return state
 
     # close the robot's gripper

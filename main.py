@@ -4,8 +4,9 @@ import numpy as np
 import os
 import time
 from robot import Panda
+import math
 
-from ollama import generate # Single messages
+import ollama
 
 # parameters
 control_dt = 1. / 240.
@@ -35,40 +36,99 @@ panda = Panda(basePosition=[0, 0, 0],
                 baseOrientation=p.getQuaternionFromEuler([0, 0, 0]),
                 jointStartPositions=jointStartPositions)
 
+# Tool configuration
+def move_to_pose(x: float, y: float, z: float, rotz: float) -> str:
+    """
+    Move robot end-effector to a Cartesian pose.
+
+    Args:
+        x: target x (meters)
+        y: target y (meters)
+        z: target z (meters)
+        rotz: target rotation about z (radians). Use 0.0 for gripper facing down.
+    Returns:
+        A short status string.
+    """
+
+    # Could clamp bounds for safety
+
+    for _ in range(800):
+        panda.move_to_pose(ee_position=[x, y, z], ee_rotz=rotz, positionGain=0.01)
+        p.stepSimulation()
+        time.sleep(control_dt)
+
+    return f"moved_to_pose({x:.3f}, {y:.3f}, {z:.3f}, {rotz:.3f})"
+
+def open_gripper() -> str:
+    """Open the robot gripper."""
+    for _ in range(300):
+        panda.open_gripper()
+        p.stepSimulation()
+        time.sleep(control_dt)
+    return "gripper_opened"
+
+def close_gripper() -> str:
+    """Close the robot gripper."""
+    for _ in range(300):
+        panda.close_gripper()
+        p.stepSimulation()
+        time.sleep(control_dt)
+    return "gripper_closed"
+
+def done(reason: str = "") -> str:
+    return f"done: {reason}"
+
+available_functions = {
+    "move_to_pose": move_to_pose,
+    "open_gripper": open_gripper,
+    "close_gripper": close_gripper,
+    "done": done
+}
+
+def describe_state() -> str:
+    s = panda.get_state()
+    ee = s["ee-position"]
+    return (
+        f"End-Effector Position: ({ee[0]:.4f}, {ee[1]:.4f}, {ee[2]:.4f}); "
+        f"Gripper State: {s['gripper_state']}."
+    )
+
+def describe_env() -> str:
+    cube1_pos, _ = p.getBasePositionAndOrientation(cube1)
+    cube2_pos, _ = p.getBasePositionAndOrientation(cube2)
+    return (
+        f"Cube1 Position: ({cube1_pos[0]:.4f}, {cube1_pos[1]:.4f}, {cube1_pos[2]:.4f}); "
+        f"Cube2 Position: ({cube2_pos[0]:.4f}, {cube2_pos[1]:.4f}, {cube2_pos[2]:.4f}); "
+        f"Cube size: 0.05m."
+    )
+
+
+# System prompt for tool use; generated via Chat
+SYSTEM = """
+You control a Panda robot arm with a gripper in simulation by calling tools.
+
+You MUST act by calling tools. Do not output plans, JSON, or explanations.
+- If you need multiple steps, call multiple tools.
+
+Available tools:
+- move_to_pose(x, y, z, rotz)
+- open_gripper()
+- close_gripper()
+- done()
+
+To place a cube on top of another, you should move the first cube at least 10cm above the second cube before lowering it down.
+
+Use rotz=0.0 unless the user explicitly requests otherwise.
+
+When the task is complete, call done() exactly once and stop.
+"""
+
+MODEL = "qwen3:8b"
+
 # let the scene initialize
 for i in range (200):
     p.stepSimulation()
     time.sleep(control_dt)
-
-# run sequence of position and gripper commands
-# for i in range (800):
-#     panda.move_to_pose(ee_position=[0.6, -0.2, 0.1], ee_rotz=0., positionGain=0.01)
-#     p.stepSimulation()
-#     time.sleep(control_dt)
-
-# for i in range (800):
-#     panda.move_to_pose(ee_position=[0.6, -0.2, 0.02], ee_rotz=0., positionGain=0.01)
-#     p.stepSimulation()
-#     time.sleep(control_dt)    
-
-# for i in range (300):
-#     panda.close_gripper()
-#     p.stepSimulation()
-#     time.sleep(control_dt)
-
-# for i in range (800):
-#     panda.move_to_pose(ee_position=[0.6, -0.2, 0.4], ee_rotz=np.pi/2, positionGain=0.01)
-#     p.stepSimulation()
-#     time.sleep(control_dt)  
-
-# Control robot with LLM commands via Ollama
-# Ignore joints 8 and 9
-# Joints 10 and 11 are the gripper fingers
-# Revolute = radians and prismatic = meters
-# We're using this Panda robot this year
-
-# LLM should have access to state of arm and ball. It should be given command from user and append the state
-# Have some code here that can call robot functions
 
 terminate = False
 
@@ -79,80 +139,71 @@ while not terminate: # Execute commands for robot
         break
 
     state = panda.get_state()
-    state_description = f"End-Effector Position: {state['ee-position']}"
 
-    cube1_pos, cube1_orn = p.getBasePositionAndOrientation(cube1)
-    cube2_pos, cube2_orn = p.getBasePositionAndOrientation(cube2)
-    env_description = f"Cube1 Position: {cube1_pos}, Cube1 Orientation: {cube1_orn}, Cube2 Position: {cube2_pos}, Cube2 Orientation: {cube2_orn}."
+    messages = [
+        {"role": "system", "content": SYSTEM},
+        {"role": "user", "content": f"Observations:\nState: {describe_state()}\nEnv: {describe_env()}\nCommand: {user_command}"}
+    ]
 
-    # Few shot prompt with state, user command, available functions, and expected format. Examples created with Chat.
-    prompt = f"""
-    You are controlling a robot arm to accomplish user instructions.
-    You will figure out the minimum sequence of robot actions that will fulfill the user's command.
-    The robot has the following commands available: move_to_pose(x, y, z, rotz), open_gripper(), close_gripper().
-    To pick up a cube, move the end-effector above the cube, lower it down, close the gripper, then lift up.
-    To place down a cube, move the end-effector above the target position, lower it down, open the gripper, then lift up.
-    The end-effector orientation should have the gripper facing downwards (i.e., rotz = 0.0) unless specified otherwise.
-    The units for x, y, z, and rotz are meters and radians, respectively.
-    
-    Use the current robot and environment states to determine the exact coordinates for the actions.
-    Your response should be a semicolon separated list of the final and exact commands to run.
-    Do not provide any additional text or explanations.
+    response = ollama.chat(
+        model=MODEL,
+        messages=messages,
+        tools=[move_to_pose, open_gripper, close_gripper, done],
+        options={
+            "temperature": 0.0,
+        },
+        keep_alive="30m",
+    )
 
-    <Start of Example>
-    Current robot state: End-Effector Position: (0.55, 0.00, 0.52)
-    Current environment state: Cube1 Position: (0.60, -0.20, 0.025), Cube1 Orientation: (0.0, 0.0, 0.0, 1.0), Cube2 Position: (0.40, -0.30, 0.025), Cube2 Orientation: (0.0, 0.0, 0.0, 1.0)
-    User command: pick up cube1
-    Response: open_gripper(); move_to_pose(0.60, -0.20, 0.12, 0.0); move_to_pose(0.60, -0.20, 0.03, 0.0); close_gripper(); move_to_pose(0.60, -0.20, 0.20, 0.0)
-    <End of Example>
+    # print("Thinking:", getattr(response.message, "thinking", None))
+    # print("Content :", repr(getattr(response.message, "content", None)))
+    # print("Tool calls:", getattr(response.message, "tool_calls", None))
 
-    <Start of Example>
-    Current robot state: End-Effector Position: (0.55, 0.00, 0.52)
-    Current environment state: Cube1 Position: (0.60, -0.20, 0.025), Cube1 Orientation: (0.0, 0.0, 0.0, 1.0), Cube2 Position: (0.40, -0.30, 0.025), Cube2 Orientation: (0.0, 0.0, 0.0, 1.0)
-    User command: stack cube1 on top of cube2
-    Response: open_gripper(); move_to_pose(0.60, -0.20, 0.12, 0.0); move_to_pose(0.60, -0.20, 0.03, 0.0); close_gripper(); move_to_pose(0.60, -0.20, 0.20, 0.0); move_to_pose(0.40, -0.30, 0.18, 0.0); move_to_pose(0.40, -0.30, 0.08, 0.0); open_gripper(); move_to_pose(0.40, -0.30, 0.22, 0.0)
-    <End of Example>
-    
-    Current robot state: {state_description}
-    Current environment state: {env_description}
-    User command: {user_command}
-    Response:"""
+    messages.append(response.message)
 
-    response = generate(
-        # model="llama3.2:latest",
-        model="deepseek-r1:14b",
-        prompt=prompt,
-        )
+    tool_calls = getattr(response.message, "tool_calls", None) or []
+    if not tool_calls:
+        # Done (model chose not to call tools further)
+        break
 
-    response_text = response["response"]
+    for call in tool_calls:
+        fn_name = call.function.name
+        fn_args = call.function.arguments or {}
+        fn = available_functions.get(fn_name)
 
-    print("LLM Response Text:")
-    print(response_text)
+        if fn is None:
+            messages.append({
+                "role": "tool",
+                "tool_name": fn_name,
+                "content": f"ERROR: unknown tool {fn_name}",
+            })
+            continue
 
-    # Command options: move_to_pose(x, y, z, rotz), open_gripper(), close_gripper()
-    commands = [cmd.strip() for cmd in response_text.split(';') if cmd.strip()]
+        try:
+            result = fn(**fn_args)
+        except Exception as e:
+            result = f"ERROR executing {fn_name}({fn_args}): {e}"
 
-    for cmd in commands:
-        if cmd.startswith("move_to_pose"):
-            # Extract parameters
-            params = cmd[13:-1]  # Get the string inside the parentheses
-            x, y, z, rotz = map(float, params.split(','))
-            print(f"Executing: move_to_pose({x}, {y}, {z}, {rotz})")
-            for i in range (800):
-                panda.move_to_pose(ee_position=[x, y, z], ee_rotz=rotz, positionGain=0.01)
-                p.stepSimulation()
-                time.sleep(control_dt)
-        elif cmd == "open_gripper()":
-            print("Executing: open_gripper()")
-            for i in range (300):
-                panda.open_gripper()
-                p.stepSimulation()
-                time.sleep(control_dt)
-        elif cmd == "close_gripper()":
-            print("Executing: close_gripper()")
-            for i in range (300):
-                panda.close_gripper()
-                p.stepSimulation()
-                time.sleep(control_dt)
-        else:
-            print(f"Unknown command: {cmd}")
+        messages.append({
+            "role": "tool",
+            "tool_name": fn_name,
+            "content": str(result),
+        })
+
+        messages.append({
+        "role": "user",
+        "content": "Updated observations:\n"
+                f"State: {describe_state()}\n"
+                f"Env: {describe_env()}"
+        })
+
+
+
+# Control robot with LLM commands via Ollama
+# Ignore joints 8 and 9
+# Joints 10 and 11 are the gripper fingers
+# Revolute = radians and prismatic = meters
+# We're using this Panda robot this year
+
+# LLM should have access to state of arm and ball. It should be given command from user and append the state
+# Have some code here that can call robot functions
