@@ -79,36 +79,35 @@ while not terminate: # Execute commands for robot
         break
 
     state = panda.get_state()
-    state_description = f"Joint Positions: {state['joint-position']}, End-Effector Position: {state['ee-position']}"
+    state_description = f"End-Effector Position: {state['ee-position']}"
 
     cube1_pos, cube1_orn = p.getBasePositionAndOrientation(cube1)
     cube2_pos, cube2_orn = p.getBasePositionAndOrientation(cube2)
     env_description = f"Cube1 Position: {cube1_pos}, Cube1 Orientation: {cube1_orn}, Cube2 Position: {cube2_pos}, Cube2 Orientation: {cube2_orn}."
 
-    # One shot prompt with state, user command, available functions, and expected format
+    # Few shot prompt with state, user command, available functions, and expected format. Examples created with Chat.
     prompt = f"""
     You are controlling a robot arm to accomplish user instructions.
-    The robot is a Panda robotic arm with a two-finger gripper. It is on a table with a small cube nearby.
     You will figure out the minimum sequence of robot actions that will fulfill the user's command.
     The robot has the following commands available: move_to_pose(x, y, z, rotz), open_gripper(), close_gripper().
     To pick up a cube, move the end-effector above the cube, lower it down, close the gripper, then lift up.
     To place down a cube, move the end-effector above the target position, lower it down, open the gripper, then lift up.
     The end-effector orientation should have the gripper facing downwards (i.e., rotz = 0.0) unless specified otherwise.
     The units for x, y, z, and rotz are meters and radians, respectively.
-    Use the current robot and environment states to determine appropriate coordinates for the actions.
-
-    Your response should be a semicolon separated list of the exact commands to run.
+    
+    Use the current robot and environment states to determine the exact coordinates for the actions.
+    Your response should be a semicolon separated list of the final and exact commands to run.
     Do not provide any additional text or explanations.
 
     <Start of Example>
-    Current robot state: Joint Positions: [0.0, 0.0, 0.0, -1.57, 0.0, 1.57, 0.785, 0.0, 0.0, 0.04, 0.04], End-Effector Position: (0.55, 0.00, 0.52)
+    Current robot state: End-Effector Position: (0.55, 0.00, 0.52)
     Current environment state: Cube1 Position: (0.60, -0.20, 0.025), Cube1 Orientation: (0.0, 0.0, 0.0, 1.0), Cube2 Position: (0.40, -0.30, 0.025), Cube2 Orientation: (0.0, 0.0, 0.0, 1.0)
-    User command: pick up a cube
+    User command: pick up cube1
     Response: open_gripper(); move_to_pose(0.60, -0.20, 0.12, 0.0); move_to_pose(0.60, -0.20, 0.03, 0.0); close_gripper(); move_to_pose(0.60, -0.20, 0.20, 0.0)
     <End of Example>
 
     <Start of Example>
-    Current robot state: Joint Positions: [0.0, 0.0, 0.0, -1.57, 0.0, 1.57, 0.785, 0.0, 0.0, 0.04, 0.04], End-Effector Position: (0.55, 0.00, 0.52)
+    Current robot state: End-Effector Position: (0.55, 0.00, 0.52)
     Current environment state: Cube1 Position: (0.60, -0.20, 0.025), Cube1 Orientation: (0.0, 0.0, 0.0, 1.0), Cube2 Position: (0.40, -0.30, 0.025), Cube2 Orientation: (0.0, 0.0, 0.0, 1.0)
     User command: stack cube1 on top of cube2
     Response: open_gripper(); move_to_pose(0.60, -0.20, 0.12, 0.0); move_to_pose(0.60, -0.20, 0.03, 0.0); close_gripper(); move_to_pose(0.60, -0.20, 0.20, 0.0); move_to_pose(0.40, -0.30, 0.18, 0.0); move_to_pose(0.40, -0.30, 0.08, 0.0); open_gripper(); move_to_pose(0.40, -0.30, 0.22, 0.0)
@@ -119,18 +118,19 @@ while not terminate: # Execute commands for robot
     User command: {user_command}
     Response:"""
 
-    # print("\nPrompt to LLM:")
-    # print(prompt)
+    response = generate(
+        # model="llama3.2:latest",
+        model="deepseek-r1:14b",
+        prompt=prompt,
+        )
 
-    response = generate("deepseek-r1:14b", prompt=prompt)
+    response_text = response["response"]
 
-    reponse_text = response["response"]
-
-    print("LLM Response:")
-    print(reponse_text)
+    print("LLM Response Text:")
+    print(response_text)
 
     # Command options: move_to_pose(x, y, z, rotz), open_gripper(), close_gripper()
-    commands = [cmd.strip() for cmd in reponse_text.split(';') if cmd.strip()]
+    commands = [cmd.strip() for cmd in response_text.split(';') if cmd.strip()]
 
     for cmd in commands:
         if cmd.startswith("move_to_pose"):
@@ -156,5 +156,3 @@ while not terminate: # Execute commands for robot
                 time.sleep(control_dt)
         else:
             print(f"Unknown command: {cmd}")
-
-    state = panda.get_state()
