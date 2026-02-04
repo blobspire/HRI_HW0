@@ -144,17 +144,10 @@ while not terminate: # Execute commands for robot
         terminate = True
         break
 
-    state = panda.get_state()
-
     messages = [
         {"role": "system", "content": SYSTEM},
         {"role": "user", "content": f"Observations:\nState: {describe_state()}\nEnv: {describe_env()}\nCommand: {user_command}\nNow complete the task using the tools."}
     ]
-
-    # Print messages for debugging
-    print("Initial messages:")
-    for msg in messages:
-        print(f"{msg['role']}: {msg['content']}")
 
     MAX_STEPS = 20
     for step in range(MAX_STEPS):
@@ -178,7 +171,7 @@ while not terminate: # Execute commands for robot
         messages.append(response.message)
 
         # If model does not call tools but does provide content, remind of tool use and force retry. It often details the plan but doesn't call tools. 
-        if not tool_calls and content:
+        if not tool_calls:
             messages.append({
                 "role": "system",
                 "content": (
