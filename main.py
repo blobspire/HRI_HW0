@@ -97,7 +97,7 @@ def describe_env() -> str:
     return (
         f"Cube1 Position: ({cube1_pos[0]:.4f}, {cube1_pos[1]:.4f}, {cube1_pos[2]:.4f}); "
         f"Cube2 Position: ({cube2_pos[0]:.4f}, {cube2_pos[1]:.4f}, {cube2_pos[2]:.4f}); "
-        f"Cube size: 0.05m."
+        f"The cube positions are the center of the cubes. Cube dimensions: 0.05m x 0.05m x 0.05m."
     )
 
 
