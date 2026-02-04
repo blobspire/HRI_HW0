@@ -103,7 +103,7 @@ def describe_env() -> str:
 
 # System prompt for tool use
 SYSTEM = """
-You control a simulation Panda robot arm with a gripper by calling tools. Your goal is to execute the user's command by calling the available tools to control the robot arm and gripper.
+You control a simulation Panda robot arm with a gripper by calling tools. You want to accomplish the user's command by calling the available tools to control the robot arm and gripper. Your task is to execute the best next move based on the current state.
 
 Available tools:
 - move_to_pose(x, y, z, rotz): move the end-effector to a Cartesian pose
@@ -111,16 +111,18 @@ Available tools:
 - close_gripper(): close the robot gripper
 - done(): indicate task completion
 
+
+
 You MUST call tools to control the robot. Do not output text. When the task is complete, call done().
 
 <Start of example>
 State: End-Effector Position: (0.5545, 0.0002, 0.5195); Gripper State: open. Gripper Width: 0.0800.
-Env: Cube1 Position: (0.6268, -0.2203, 0.0250); Cube2 Position: (0.4229, -0.3189, 0.0250); Cube size: 0.05m.
+Env: Cube1 Position: (0.6268, -0.2203, 0.0250); Cube2 Position: (0.4229, -0.3189, 0.0250); The cube positions are the center of the cubes. Cube dimensions: 0.05m x 0.05m x 0.05m.
 Command: pick up cube1
-Now complete the task using the tools.
+Now complete the best next move towards completing the task using the tools.
 
 content: ''
-tool_calls: ToolCall(function=Function(name='move_to_pose', arguments={'x': 0.6268, 'y': -0.2203, 'z': 0.025, 'rotz': 0})), ToolCall(function=Function(name='close_gripper', arguments={})), ToolCall(function=Function(name='move_to_pose', arguments={'x': 0.6268, 'y': -0.2203, 'z': 0.125, 'rotz': 0})), ToolCall(function=Function(name='done', arguments={}))
+tool_calls: ToolCall(function=Function(name='move_to_pose', arguments={'x': 0.6268, 'y': -0.2203, 'z': 0.025, 'rotz': 0}))
 <End of example>
 """
 # Including few shot examples for picking up cubes and stacking cubes drastically improves success rate but defeats some of the purpose of the LLM reasoning.
@@ -146,7 +148,7 @@ while not terminate: # Execute commands for robot
 
     messages = [
         {"role": "system", "content": SYSTEM},
-        {"role": "user", "content": f"Observations:\nState: {describe_state()}\nEnv: {describe_env()}\nCommand: {user_command}\nNow complete the task using the tools."}
+        {"role": "user", "content": f"Observations:\nState: {describe_state()}\nEnv: {describe_env()}\nCommand: {user_command}\nNow complete the best next move towards completing the task using the tools."}
     ]
 
     MAX_STEPS = 20
@@ -184,7 +186,7 @@ while not terminate: # Execute commands for robot
                     f"Command: {user_command}\n"
                     f"State: {describe_state()}\n"
                     f"Env: {describe_env()}\n"
-                    "Retry the task using the tools now.\n"
+                    "Retry the best next move using the tools now.\n"
                 )
             })
             continue
